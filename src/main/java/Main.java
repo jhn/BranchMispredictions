@@ -18,14 +18,14 @@ public class Main {
         String queryFile   = args[0];
         String configFile  = args[1];
 
-        Properties properties = new Properties();
-        properties.load(new FileInputStream(configFile));
+        Properties costs = new Properties();
+        costs.load(new FileInputStream(configFile));
 
         List<List<Double>> selectivityList = parseFileToDoubleList(Files.readAllLines(Paths.get(queryFile), Charset.defaultCharset()));
 
         List<Callable<String>> tasks = selectivityList
                 .stream()
-                .map(Optimizer::new)
+                .map(selectivities -> new Optimizer(selectivities, costs))
                 .collect(Collectors.toList());
 
         ExecutorService executor = Executors.newFixedThreadPool(selectivityList.size());
