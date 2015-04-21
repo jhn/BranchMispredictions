@@ -79,9 +79,7 @@ public class Optimizer implements Callable<String> {
 
     public String process() {
         // 1. Create an array A[] of size 2^k indexed by the subsets of S
-        int size = (int) Math.pow(2.0, selectivities.size());
-        Set<Record> records = new HashSet<>(size);
-        List<Set<Record>> sets = generatePowerset(records); // TODO: should be selectivities instead
+        BitSetVector bitSetVector = new BitSetVector(selectivities);
         return "Process me! :-(";
     }
 
@@ -90,22 +88,18 @@ public class Optimizer implements Callable<String> {
         return process();
     }
 
-    public static <T> List<Set<T>> generatePowerset(Set<T> originalSet) {
-        List<Set<T>> sets = new ArrayList<>();
-        if (originalSet.isEmpty()) {
-            sets.add(new HashSet<>());
-            return sets;
+    private static class BitSetVector {
+        List<BitSet> bitSetList;
+        List<Double> data;
+
+        public BitSetVector(List<Double> data) {
+            this.data = data;
+            int bitSetSize = (int) (Math.pow(2.0, (double) data.size()) - 1);
+            this.bitSetList = new ArrayList<>(bitSetSize);
+            for (int i = 1; i <= bitSetSize; i++) {
+                BitSet currentBitSet = BitSet.valueOf(new long[]{i});
+                bitSetList.add(currentBitSet);
+            }
         }
-        List<T> list = new ArrayList<>(originalSet);
-        T head = list.get(0);
-        Set<T> rest = new HashSet<>(list.subList(1, list.size()));
-        for (Set<T> set : generatePowerset(rest)) {
-            Set<T> newSet = new HashSet<>();
-            newSet.add(head);
-            newSet.addAll(set);
-            sets.add(newSet);
-            sets.add(set);
-        }
-        return sets;
     }
 }
