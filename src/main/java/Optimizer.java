@@ -3,11 +3,22 @@ import java.util.concurrent.Callable;
 
 public class Optimizer implements Callable<String> {
 
-    private static class Record {
+    private static class SubSet {
+
+        /**
+         * The super list of selectivities.
+         */
+        static List<Double> selectivities;
+
+        /**
+         * Represents which selectivities we are currently using.
+         */
+        BitSet bs;
+
         /**
          * Number of terms corresponding to each subset.
          */
-        int n;
+        int k;
 
         /**
          * Product of the selectivities of all terms in the subset.
@@ -27,22 +38,37 @@ public class Optimizer implements Callable<String> {
         /**
          * Left child of the sub plan.
          */
-        Record L;
+        SubSet L;
 
         /**
          * Right child of the sub plan.
          */
-        Record R;
+        SubSet R;
+
+        CostModel costModel;
+
+        public double noBranchCost() {
+            return k * costModel.r + (k - 1) * costModel.l + costModel.f * k + costModel.a;
+        }
+
+        public double logicalAndCost() {
+            double q = p <= 0.5 ? p : 1.0 - p;
+            return k * costModel.r + (k - 1) * costModel.l + k * costModel.f + costModel.t + costModel.m * q + p * costModel.a;
+        }
+
+        public double fixedCost() {
+            return k * costModel.r + (k - 1) * costModel.l + k * costModel.f + costModel.t;
+        }
     }
 
     private static class CostModel {
 
-        private double r;
-        private double t;
-        private double l;
-        private double m;
-        private double a;
-        private double f;
+        double r;
+        double t;
+        double l;
+        double m;
+        double a;
+        double f;
 
         /**
          *
@@ -77,29 +103,25 @@ public class Optimizer implements Callable<String> {
         this.costModel = new CostModel(a, f, l, m, r, t);
     }
 
-    public String process() {
+    @Override
+    public String call() throws Exception {
         // 1. Create an array A[] of size 2^k indexed by the subsets of S
-        BitSetVector bitSetVector = new BitSetVector(selectivities);
+        List<SubSet> subSets = generateSubSets(selectivities, costModel);
         return "Process me! :-(";
     }
 
-    @Override
-    public String call() throws Exception {
-        return process();
-    }
-
-    private static class BitSetVector {
-        List<BitSet> bitSetList;
-        List<Double> data;
-
-        public BitSetVector(List<Double> data) {
-            this.data = data;
-            int bitSetSize = (int) (Math.pow(2.0, (double) data.size()) - 1);
-            this.bitSetList = new ArrayList<>(bitSetSize);
-            for (int i = 1; i <= bitSetSize; i++) {
-                BitSet currentBitSet = BitSet.valueOf(new long[]{i});
-                bitSetList.add(currentBitSet);
-            }
+    private static List<SubSet> generateSubSets(List<Double> selectivities, CostModel costModel) {
+        int subSetSize = (int) (Math.pow(2.0, (double) selectivities.size()) - 1);
+        List<SubSet> subSets = new ArrayList<>(subSetSize);
+        SubSet.selectivities = selectivities; // the global list of selectivities for all subsets
+        for (int i = 1; i <= subSetSize; i++) {
+            SubSet subSet = new SubSet();
+            subSet.bs = BitSet.valueOf(new long[]{i}); // this flips bits in order
+            subSet.k = i;
+            subSet.p = 0; // TODO: product of selectivities of all terms in the subset
+            subSet.costModel = costModel;
+            subSets.add(subSet);
         }
+        return subSets;
     }
 }
