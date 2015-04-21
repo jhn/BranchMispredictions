@@ -6,7 +6,7 @@ public class Optimizer implements Callable<String> {
     private static class SubSet {
 
         /**
-         * The super list of selectivities.
+         * The list of selectivities for this subset.
          */
         List<Double> selectivities;
 
@@ -114,17 +114,42 @@ public class Optimizer implements Callable<String> {
 
     private static List<SubSet> generateSubSets(List<Double> selectivities, CostModel costModel) {
         int subSetSize = (int) (Math.pow(2.0, (double) selectivities.size()) - 1);
+        List<List<Double>> selectivityPowerSet = generatePowerset(selectivities);
         List<SubSet> subSets = new ArrayList<>(subSetSize);
-        for (int i = 1; i <= subSetSize; i++) {
+        for (List<Double> selectivityList : selectivityPowerSet) {
             SubSet subSet = new SubSet();
-            subSet.bs = BitSet.valueOf(new long[]{i}); // this flips bits in order
-            subSet.k = i;
+            subSet.k = selectivityList.size();
             subSet.p = 0;
             subSet.costModel = costModel;
-            subSet.selectivities = selectivities; // the global list of selectivities for all subsets
+            subSet.selectivities = selectivityList;
             subSets.add(subSet);
         }
         return subSets;
+    }
+
+    public static <T> List<List<T>> generatePowerset(List<T> originalSet) {
+        List<List<T>> sets = new ArrayList<>();
+        if (originalSet.isEmpty()) {
+            sets.add(new ArrayList<>());
+            return sets;
+        }
+        List<T> list = new ArrayList<>(originalSet);
+        T head = list.get(0);
+        List<T> rest = new ArrayList<>(list.subList(1, list.size()));
+        for (List<T> set : generatePowerset(rest)) {
+            List<T> newSet = new ArrayList<>();
+            newSet.add(head);
+            newSet.addAll(set);
+            sets.add(newSet);
+            sets.add(set);
+        }
+        order(sets);
+        return sets;
+    }
+
+    public static <T> List<List<T>> order(List<List<T>> list) {
+        Collections.sort(list, (o1, o2) -> o1.size() - o2.size());
+        return list;
     }
 
     private static void initialCosts(List<SubSet> subSets) {
@@ -141,13 +166,6 @@ public class Optimizer implements Callable<String> {
     }
 
     private static void setupP(List<SubSet> subsets) {
-        for (SubSet subset : subsets) {
-            double p = 1;
-            for (int i = subset.bs.nextSetBit(0); i >= 0; i = subset.bs.nextSetBit(i+1)) {
-                // operate on index i here
-                p *= subset.selectivities.get(i);
-            }
-            subset.p = p;
-        }
+        subsets.stream().forEach(subset -> subset.p = subset.selectivities.stream().reduce(1.0, (a, b) -> a * b));
     }
 }
