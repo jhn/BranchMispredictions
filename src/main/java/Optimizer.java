@@ -142,7 +142,6 @@ public class Optimizer implements Callable<String> {
         // 1. Create an array A[] of size 2^k indexed by the subsets of S
         List<SubSet> subSets = generateSubSets(selectivities, costModel);
         initialCosts(subSets);
-        setupP(subSets);
         return "Process me! :-(";
     }
 
@@ -153,7 +152,7 @@ public class Optimizer implements Callable<String> {
         for (List<Double> selectivityList : selectivityPowerSet) {
             SubSet subSet = new SubSet();
             subSet.k = selectivityList.size();
-            subSet.p = 0;
+            subSet.p = selectivityList.stream().reduce(1.0, (a, b) -> a * b);
             subSet.costModel = costModel;
             subSet.selectivities = selectivityList;
             subSets.add(subSet);
@@ -197,9 +196,5 @@ public class Optimizer implements Callable<String> {
                 subSet.c = logicalAndCost;
             }
         }
-    }
-
-    private static void setupP(List<SubSet> subsets) {
-        subsets.stream().forEach(subset -> subset.p = subset.selectivities.stream().reduce(1.0, (a, b) -> a * b));
     }
 }
