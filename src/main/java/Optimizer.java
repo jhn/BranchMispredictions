@@ -59,6 +59,40 @@ public class Optimizer implements Callable<String> {
         public double fixedCost() {
             return k * costModel.r + (k - 1) * costModel.l + k * costModel.f + costModel.t;
         }
+
+        public SubSet leftMost() {
+            SubSet tempLeft = this;
+
+            while (tempLeft.L != null) {
+                tempLeft = tempLeft.L;
+            }
+            return tempLeft;
+        }
+
+        // Return true if suboptimal by lemma 4.8
+        public boolean ifLemma48(SubSet subs)
+        {
+            double val1 = (this.leftMost().p - 1) / (this.leftMost()).fixedCost();
+            double val2 = (subs.p - 1) / subs.fixedCost();
+            boolean term1 = (subs.p <= this.leftMost().p);
+            boolean term2 = (val1 < val2);
+
+            return (term1 && term2);
+        }
+
+        // Return true if suboptimal by lemma 4.9
+        public boolean ifLemma49(SubSet subs)
+        {
+
+            double val1 = this.leftMost().fixedCost();
+            double val2 = subs.fixedCost();
+
+            boolean term1 = ( this.leftMost().p <= subs.p );
+            boolean term2 = (val1 < val2);
+
+            return (term1 && term2);
+        }
+
     }
 
     private static class CostModel {
