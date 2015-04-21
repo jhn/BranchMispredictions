@@ -8,7 +8,7 @@ public class Optimizer implements Callable<String> {
         /**
          * The super list of selectivities.
          */
-        static List<Double> selectivities;
+        List<Double> selectivities;
 
         /**
          * Represents which selectivities we are currently using.
@@ -107,21 +107,47 @@ public class Optimizer implements Callable<String> {
     public String call() throws Exception {
         // 1. Create an array A[] of size 2^k indexed by the subsets of S
         List<SubSet> subSets = generateSubSets(selectivities, costModel);
+        initialCosts(subSets);
+        setupP(subSets);
         return "Process me! :-(";
     }
 
     private static List<SubSet> generateSubSets(List<Double> selectivities, CostModel costModel) {
         int subSetSize = (int) (Math.pow(2.0, (double) selectivities.size()) - 1);
         List<SubSet> subSets = new ArrayList<>(subSetSize);
-        SubSet.selectivities = selectivities; // the global list of selectivities for all subsets
         for (int i = 1; i <= subSetSize; i++) {
             SubSet subSet = new SubSet();
             subSet.bs = BitSet.valueOf(new long[]{i}); // this flips bits in order
             subSet.k = i;
-            subSet.p = 0; // TODO: product of selectivities of all terms in the subset
+            subSet.p = 0;
             subSet.costModel = costModel;
+            subSet.selectivities = selectivities; // the global list of selectivities for all subsets
             subSets.add(subSet);
         }
         return subSets;
+    }
+
+    private static void initialCosts(List<SubSet> subSets) {
+        for (SubSet subSet : subSets) {
+            double logicalAndCost = subSet.logicalAndCost();
+            double noBranchCost = subSet.noBranchCost();
+            if (noBranchCost < logicalAndCost) {
+                subSet.c = noBranchCost;
+                subSet.b = true;
+            } else {
+                subSet.c = logicalAndCost;
+            }
+        }
+    }
+
+    private static void setupP(List<SubSet> subsets) {
+        for (SubSet subset : subsets) {
+            double p = 1;
+            for (int i = subset.bs.nextSetBit(0); i >= 0; i = subset.bs.nextSetBit(i+1)) {
+                // operate on index i here
+                p *= subset.selectivities.get(i);
+            }
+            subset.p = p;
+        }
     }
 }
