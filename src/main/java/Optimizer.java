@@ -1,10 +1,5 @@
-import jdk.nashorn.internal.runtime.ECMAException;
-
 import java.util.*;
 import java.util.concurrent.Callable;
-import java.util.function.BooleanSupplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class Optimizer implements Callable<String> {
 
@@ -48,12 +43,24 @@ public class Optimizer implements Callable<String> {
             return one.fixedCost() + one.costModel.m * q + one.p * two.c;
         }
 
+        public SubSet leftMost() {
+            SubSet q = this;
+            while (q.L != null) {
+                q = q.L;
+            }
+            return q;
+        }
+
         public boolean lemma48(SubSet two) {
-            return two.p <= p && ((two.p - 1.0) / two.fixedCost()) < ((p - 1.0) / this.fixedCost());
+            double p1 = two.p;
+            double p2 = this.leftMost().p;
+            return p2 <= p1 && ((p2 - 1) / this.leftMost().fixedCost()) < ((p1 - 1) / two.fixedCost());
         }
 
         public boolean lemma49(SubSet two) {
-            return two.p < p && two.fixedCost() < this.fixedCost();
+            double p1 = two.p;
+            double p2 = this.leftMost().p;
+            return p2 <= p1 && this.leftMost().fixedCost() < two.fixedCost();
         }
     }
 
@@ -159,6 +166,7 @@ public class Optimizer implements Callable<String> {
         // generates the powerset for the list
         List<List<Integer>> positions = powerSet(numbers);
         positions.remove(0); // get rid of the empty set
+
         // for each one of these lists of lists
         List<List<Boolean>> bitSetsPowerSets = new ArrayList<>(positions.size());
         for (List<Integer> position : positions) {
