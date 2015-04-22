@@ -25,7 +25,7 @@ public class Main {
                 .map(selectivities -> new Optimizer(selectivities, costs))
                 .collect(Collectors.toList());
 
-        ExecutorService executor = Executors.newFixedThreadPool(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
         List<Future<String>> results = executor.invokeAll(tasks);
         results.stream().forEach(f -> {
             try {
