@@ -273,43 +273,44 @@ public class Optimizer implements Callable<String> {
         return list;
     }
 
+    /**
+     * The union of two bit sets.
+     *
+     * @param first A bit set.
+     * @param second Another bit set.
+     * @return A new bit set that has joined bits turned on.
+     */
     public static List<Boolean> bitUnion(List<Boolean> first, List<Boolean> second) {
         List<Boolean> union = new ArrayList<>(first.size());
         for (int i = 0; i < first.size(); i++) {
-            if (first.get(i) || second.get(i)) {
-                union.add(i, true);
-            } else {
-                union.add(i, false);
-            }
+            union.add(first.get(i) || second.get(i));
         }
         return union;
     }
 
+    /**
+     * The intersection of two bit sets.
+     *
+     * @param first A bit set.
+     * @param second Another bit set.
+     * @return A new bit set that has intersected bits turned on.
+     */
     public static List<Boolean> bitIntersection(List<Boolean> first, List<Boolean> second) {
         List<Boolean> intersection = new ArrayList<>(first.size());
         for (int i = 0; i < first.size(); i++) {
-            if (first.get(i) && second.get(i)) {
-                intersection.add(i, true);
-            } else {
-                intersection.add(i, false);
-            }
+            intersection.add(first.get(i) && second.get(i));
         }
         return intersection;
     }
 
     /**
+     * Tests whether two bit sets intersect.
      *
-     * @param first
-     * @param second
-     * @return true if there is an intersection between two bit sets, false otherwise
+     * @param first A bit set.
+     * @param second Another bit set.
+     * @return true if there is an intersection between two bit sets, false otherwise.
      */
     public static boolean bitIntersect(List<Boolean> first, List<Boolean> second) {
-        List<Boolean> booleans = bitIntersection(first, second);
-        for (Boolean b : booleans) {
-            if (b) {
-                return true;
-            }
-        }
-        return false;
+        return bitIntersection(first, second).contains(true);
     }
 }
