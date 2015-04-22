@@ -6,10 +6,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class Main {
@@ -30,7 +27,13 @@ public class Main {
 
         ExecutorService executor = Executors.newFixedThreadPool(1);
         List<Future<String>> results = executor.invokeAll(tasks);
-        results.forEach(System.out::println);
+        results.stream().forEach(f -> {
+            try {
+                f.get();
+            } catch (InterruptedException | ExecutionException e) {
+                e.getCause().printStackTrace();
+            }
+        });
         executor.shutdown();
     }
 

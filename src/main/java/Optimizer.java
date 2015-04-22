@@ -40,17 +40,17 @@ public class Optimizer implements Callable<String> {
             return k * costModel.r + (k - 1) * costModel.l + k * costModel.f + costModel.t;
         }
 
-        public double branchingAndCost(SubSet two) {
-            double q = p <= 0.5 ? p : 1.0 - p;
-            return this.fixedCost() + costModel.m * q + p * two.c;
+        public static double combinedCost(SubSet one, SubSet two) {
+            double q = Math.min(one.p, 1.0 - one.p);
+            return one.fixedCost() + one.costModel.m * q + one.p * two.c;
         }
 
-        public boolean ifLemma48(SubSet two) {
-            return two.p <= p && ((two.p - 1.0) / two.fixedCost()) < ((p - 1.0)/ this.fixedCost());
+        public boolean lemma48(SubSet two) {
+            return two.p <= p && ((two.p - 1.0) / two.fixedCost()) < ((p - 1.0) / this.fixedCost());
         }
 
-        public boolean ifLemma49(SubSet two) {
-            return p <= 0.5 && two.p < p && two.fixedCost() < this.fixedCost();
+        public boolean lemma49(SubSet two) {
+            return two.p < p && two.fixedCost() < this.fixedCost();
         }
     }
 
@@ -100,33 +100,33 @@ public class Optimizer implements Callable<String> {
     public String call() throws Exception {
         List<SubSet> subSets = generateSubSets(selectivities, costModel);
 
-        initialCosts(subSets);
-        System.out.println(subSets.size());
-        subSets.stream().forEachOrdered(s -> {
-            subSets.stream().forEachOrdered(sPrime -> {
-                List<Double> intersection = intersection(s.selectivities, sPrime.selectivities);
-                if (!intersection.isEmpty()) {
-                    if (s.ifLemma48(sPrime) || s.ifLemma49(sPrime)) {
+        initializeCosts(subSets);
 
+        for (SubSet s : subSets) {
+            for (SubSet sPrime : subSets) {
+                if (!intersect(s.selectivities, sPrime.selectivities)) {
+                    if (s.lemma48(sPrime)) {
+                        continue;
+                    } else if (sPrime.p <= 0.5 && s.lemma49(sPrime)) {
+                        continue;
                     } else {
-                        double c = s.branchingAndCost(sPrime);
-                        List<Double> union = union(sPrime.selectivities, s.selectivities);
-                        for (SubSet subSet : subSets) {
-                            if (subSet.selectivities.equals(union)) {
-                                if (c < subSet.c) {
-                                    subSet.c = c;
-                                    subSet.L = sPrime;
-                                    subSet.R = s;
-                                }
-                                break;
-                            }
+                        double c = SubSet.combinedCost(sPrime, s);
+                        SubSet subset = findSubSetBySelectivity(subSets, union(sPrime.selectivities, s.selectivities));
+                        if (c < subset.c) {
+                            subset.c = c;
+                            subset.L = sPrime;
+                            subset.R = s;
                         }
                     }
                 }
-            });
-        });
+            }
+        }
         printOptimalPlan(selectivities, subSets);
         return "Process me! :-(";
+    }
+
+    private static SubSet findSubSetBySelectivity(List<SubSet> globalList, List<Double> selectivities) {
+        return globalList.stream().filter(ss -> ss.selectivities.containsAll(selectivities)).findFirst().get();
     }
 
     // (E1) && [ (E2) && [ ··· [(En-1) && (En)] ··· ]]
@@ -141,10 +141,9 @@ public class Optimizer implements Callable<String> {
     }
 
     private static List<SubSet> generateSubSets(List<Double> selectivities, CostModel costModel) {
-        int subSetSize = (int) (Math.pow(2.0, (double) selectivities.size()) - 1);
-        List<List<Double>> selectivityPowerSet = powerSet(selectivities);
+        int subSetSize = (int) (Math.pow(2.0, selectivities.size()) - 1);
         List<SubSet> subSets = new ArrayList<>(subSetSize);
-        for (List<Double> selectivityList : selectivityPowerSet) {
+        for (List<Double> selectivityList : powerSet(selectivities)) {
             SubSet subSet = new SubSet();
             subSet.k = selectivityList.size();
             subSet.selectivities = selectivityList;
@@ -156,7 +155,7 @@ public class Optimizer implements Callable<String> {
         return subSets;
     }
 
-    private static void initialCosts(List<SubSet> subSets) {
+    private static void initializeCosts(List<SubSet> subSets) {
         for (SubSet subSet : subSets) {
             double logicalAndCost = subSet.logicalAndCost();
             double noBranchCost = subSet.noBranchCost();
@@ -200,5 +199,9 @@ public class Optimizer implements Callable<String> {
 
     public static <T> List<T> intersection(List<T> first, List<T> second) {
         return first.stream().filter(second::contains).collect(Collectors.toList());
+    }
+
+    public static <T> boolean intersect(List<T> first, List<T> second) {
+        return !intersection(first, second).isEmpty();
     }
 }
