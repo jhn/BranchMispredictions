@@ -40,39 +40,17 @@ public class Optimizer implements Callable<String> {
             return k * costModel.r + (k - 1) * costModel.l + k * costModel.f + costModel.t;
         }
 
-        // TODO: these methods should not be in this class
-        public double costBranchingAnd(SubSet one, SubSet two) {
-            double q = one.p <= 0.5 ? one.p : 1.0 - one.p;
-            return one.fixedCost() + costModel.m * q + one.p * two.c;
+        public double branchingAndCost(SubSet two) {
+            double q = p <= 0.5 ? p : 1.0 - p;
+            return this.fixedCost() + costModel.m * q + p * two.c;
         }
 
-        public SubSet leftMost() {
-            SubSet tempLeft = this;
-
-            while (tempLeft.L != null) {
-                tempLeft = tempLeft.L;
-            }
-            return tempLeft;
+        public boolean ifLemma48(SubSet two) {
+            return two.p <= p && ((two.p - 1.0) / two.fixedCost()) < ((p - 1.0)/ this.fixedCost());
         }
 
-        // Return true if suboptimal by lemma 4.8
-        public boolean ifLemma48(SubSet subs) {
-            double val1 = (this.leftMost().p - 1) / (this.leftMost()).fixedCost();
-            double val2 = (subs.p - 1) / subs.fixedCost();
-            boolean term1 = (subs.p <= this.leftMost().p);
-            boolean term2 = (val1 < val2);
-
-            return term1 && term2;
-        }
-
-        // Return true if suboptimal by lemma 4.9
-        public boolean ifLemma49(SubSet subs) {
-            double val1 = this.leftMost().fixedCost();
-            double val2 = subs.fixedCost();
-            boolean term1 = ( this.leftMost().p <= subs.p );
-            boolean term2 = (val1 < val2);
-
-            return term1 && term2;
+        public boolean ifLemma49(SubSet two) {
+            return p <= 0.5 && two.p < p && two.fixedCost() < this.fixedCost();
         }
     }
 
@@ -128,12 +106,10 @@ public class Optimizer implements Callable<String> {
             subSets.stream().forEachOrdered(sPrime -> {
                 List<Double> intersection = intersection(s.selectivities, sPrime.selectivities);
                 if (!intersection.isEmpty()) {
-                    if (s.ifLemma48(sPrime)) {
-
-                    } else if (sPrime.p <= 0.5 && s.ifLemma49(sPrime)) {
+                    if (s.ifLemma48(sPrime) || s.ifLemma49(sPrime)) {
 
                     } else {
-                        double c = s.costBranchingAnd(s, sPrime);
+                        double c = s.branchingAndCost(sPrime);
                         List<Double> union = union(sPrime.selectivities, s.selectivities);
                         for (SubSet subSet : subSets) {
                             if (subSet.selectivities.equals(union)) {
@@ -166,7 +142,7 @@ public class Optimizer implements Callable<String> {
 
     private static List<SubSet> generateSubSets(List<Double> selectivities, CostModel costModel) {
         int subSetSize = (int) (Math.pow(2.0, (double) selectivities.size()) - 1);
-        List<List<Double>> selectivityPowerSet = generatePowerset(selectivities);
+        List<List<Double>> selectivityPowerSet = powerSet(selectivities);
         List<SubSet> subSets = new ArrayList<>(subSetSize);
         for (List<Double> selectivityList : selectivityPowerSet) {
             SubSet subSet = new SubSet();
@@ -178,31 +154,6 @@ public class Optimizer implements Callable<String> {
             subSets.add(subSet);
         }
         return subSets;
-    }
-
-    public static <T> List<List<T>> generatePowerset(List<T> originalSet) {
-        List<List<T>> sets = new ArrayList<>();
-        if (originalSet.isEmpty()) {
-            sets.add(new ArrayList<>());
-            return sets;
-        }
-        List<T> list = new ArrayList<>(originalSet);
-        T head = list.get(0);
-        List<T> rest = new ArrayList<>(list.subList(1, list.size()));
-        for (List<T> set : generatePowerset(rest)) {
-            List<T> newSet = new ArrayList<>();
-            newSet.add(head);
-            newSet.addAll(set);
-            sets.add(newSet);
-            sets.add(set);
-        }
-        order(sets);
-        return sets;
-    }
-
-    public static <T> List<List<T>> order(List<List<T>> list) {
-        Collections.sort(list, (o1, o2) -> o1.size() - o2.size());
-        return list;
     }
 
     private static void initialCosts(List<SubSet> subSets) {
@@ -218,13 +169,36 @@ public class Optimizer implements Callable<String> {
         }
     }
 
-    // TODO: sorted?
-    public <T> List<T> union(List<T> first, List<T> second) {
+    public static <T> List<List<T>> powerSet(List<T> originalSet) {
+        List<List<T>> sets = new ArrayList<>();
+        if (originalSet.isEmpty()) {
+            sets.add(new ArrayList<>());
+            return sets;
+        }
+        List<T> list = new ArrayList<>(originalSet);
+        T head = list.get(0);
+        List<T> rest = new ArrayList<>(list.subList(1, list.size()));
+        for (List<T> set : powerSet(rest)) {
+            List<T> newSet = new ArrayList<>();
+            newSet.add(head);
+            newSet.addAll(set);
+            sets.add(newSet);
+            sets.add(set);
+        }
+        order(sets);
+        return sets;
+    }
+
+    public static <T> List<List<T>> order(List<List<T>> list) {
+        Collections.sort(list, (o1, o2) -> o1.size() - o2.size());
+        return list;
+    }
+
+    public static <T> List<T> union(List<T> first, List<T> second) {
         return Stream.concat(first.stream(), second.stream()).distinct().collect(Collectors.toList());
     }
 
-    // TODO: sorted?
-    public <T> List<T> intersection(List<T> first, List<T> second) {
+    public static <T> List<T> intersection(List<T> first, List<T> second) {
         return first.stream().filter(second::contains).collect(Collectors.toList());
     }
 }
