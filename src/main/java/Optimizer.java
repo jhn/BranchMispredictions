@@ -114,14 +114,14 @@ public class Optimizer implements Callable<String> {
 
         for (SubSet s : subSets) {
             for (SubSet sPrime : subSets) {
-                if (!bitIntersect(s.selectivities.bits, sPrime.selectivities.bits)) {
+                if (!bitIntersect(s.selectivities.bitSet, sPrime.selectivities.bitSet)) {
                     if (s.lemma48(sPrime)) {
                         continue;
                     } else if (sPrime.p <= 0.5 && s.lemma49(sPrime)) {
                         continue;
                     } else {
                         double c = SubSet.combinedCost(sPrime, s);
-                        List<Boolean> union = bitUnion(sPrime.selectivities.bits, s.selectivities.bits);
+                        List<Boolean> union = bitUnion(sPrime.selectivities.bitSet, s.selectivities.bitSet);
                         SubSet subset = findSubSetByBits(subSets, union);
                         if (c < subset.c) {
                             subset.c = c;
@@ -139,7 +139,7 @@ public class Optimizer implements Callable<String> {
     private static SubSet findSubSetByBits(List<SubSet> globalList, List<Boolean> bits) {
         return globalList
                 .stream()
-                .filter(ss -> ss.selectivities.bits.equals(bits))
+                .filter(ss -> ss.selectivities.bitSet.equals(bits))
                 .findFirst().get();
     }
 
@@ -231,25 +231,26 @@ public class Optimizer implements Callable<String> {
     }
 
     public static class Selectivities {
-        List<Boolean> bits;         // some subset of the values
-        List<Double> values;        // The global set of selectivities
+        List<Boolean> bitSet;     // The bit set that represents selectivities
+        List<Double> values;      // The actual value of the selectivities, mapped by the bit set
 
-        public Selectivities(List<Boolean> bits, List<Double> values) {
-            this.bits = bits;
+        public Selectivities(List<Boolean> bitSet, List<Double> values) {
+            this.bitSet = bitSet;
             this.values = values;
         }
 
         /**
-         * Gets bits turned on at the bit locations.
-         * @return
+         * Gets the set of selectivities for the current bit set.
+         *
+         * @return A set of selectivities that match the corresponding bit set.
          */
         public List<Double> getSelectivitiesFromBits() {
             Double result[] = new Double[this.values.size()];
             for (int i = 0; i < this.values.size(); i++) {
                 result[i] = 0.0;
             }
-            for (int i = 0; i < this.bits.size(); i++) {
-                if (this.bits.get(i)) {
+            for (int i = 0; i < this.bitSet.size(); i++) {
+                if (this.bitSet.get(i)) {
                     result[i] = this.values.get(i);
                 }
             }
@@ -257,8 +258,9 @@ public class Optimizer implements Callable<String> {
         }
 
         /**
-         * Gets the product of the selectivities specified by the bit list.
-         * @return
+         * Calculates the p value for this bit set.
+         *
+         * @return The product of selectivities in this bit set.
          */
         public double calculateP() {
             return getSelectivitiesFromBits()
@@ -278,7 +280,7 @@ public class Optimizer implements Callable<String> {
      *
      * @param first A bit set.
      * @param second Another bit set.
-     * @return A new bit set that has joined bits turned on.
+     * @return A new bit set that has joined bitSet turned on.
      */
     public static List<Boolean> bitUnion(List<Boolean> first, List<Boolean> second) {
         List<Boolean> union = new ArrayList<>(first.size());
@@ -293,7 +295,7 @@ public class Optimizer implements Callable<String> {
      *
      * @param first A bit set.
      * @param second Another bit set.
-     * @return A new bit set that has intersected bits turned on.
+     * @return A new bit set that has intersected bitSet turned on.
      */
     public static List<Boolean> bitIntersection(List<Boolean> first, List<Boolean> second) {
         List<Boolean> intersection = new ArrayList<>(first.size());
