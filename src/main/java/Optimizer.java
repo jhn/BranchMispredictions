@@ -1,5 +1,8 @@
+import jdk.nashorn.internal.runtime.ECMAException;
+
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -8,16 +11,16 @@ public class Optimizer implements Callable<String> {
     private static class SubSet {
 
         /**
-         * selectivities: The list of selectivities for this subset.
+         * values: The list of values for this subset.
          * k: Number of terms corresponding to each subset.
-         * p: Product of the selectivities of all terms in the subset.
+         * p: Product of the values of all terms in the subset.
          * b: Whether the no-branch optimization was used to get the best cost.
          * c: Current best cost for the subset.
          * L: Left child of the sub plan.
          * R: Right child of the sub plan.
          */
 
-        List<Double> selectivities;
+        Selectivities selectivities;
         int k;
         double p;
         boolean b;
@@ -104,14 +107,15 @@ public class Optimizer implements Callable<String> {
 
         for (SubSet s : subSets) {
             for (SubSet sPrime : subSets) {
-                if (!intersect(s.selectivities, sPrime.selectivities)) {
+                if (!bitIntersect(s.selectivities.bits, sPrime.selectivities.bits)) {
                     if (s.lemma48(sPrime)) {
                         continue;
                     } else if (sPrime.p <= 0.5 && s.lemma49(sPrime)) {
                         continue;
                     } else {
                         double c = SubSet.combinedCost(sPrime, s);
-                        SubSet subset = findSubSetBySelectivity(subSets, union(sPrime.selectivities, s.selectivities));
+                        List<Boolean> union = bitUnion(sPrime.selectivities.bits, s.selectivities.bits);
+                        SubSet subset = findSubSetByBits(subSets, union);
                         if (c < subset.c) {
                             subset.c = c;
                             subset.L = sPrime;
@@ -125,8 +129,11 @@ public class Optimizer implements Callable<String> {
         return "Process me! :-(";
     }
 
-    private static SubSet findSubSetBySelectivity(List<SubSet> globalList, List<Double> selectivities) {
-        return globalList.stream().filter(ss -> ss.selectivities.containsAll(selectivities)).findFirst().get();
+    private static SubSet findSubSetByBits(List<SubSet> globalList, List<Boolean> bits) {
+        return globalList
+                .stream()
+                .filter(ss -> ss.selectivities.bits.equals(bits))
+                .findFirst().get();
     }
 
     // (E1) && [ (E2) && [ ··· [(En-1) && (En)] ··· ]]
@@ -142,17 +149,44 @@ public class Optimizer implements Callable<String> {
 
     private static List<SubSet> generateSubSets(List<Double> selectivities, CostModel costModel) {
         int subSetSize = (int) (Math.pow(2.0, selectivities.size()) - 1);
+
+        // gets a list initialized to (0, 1, 2... selectivities.size - 1)
+
+        List<Integer> numbers = new ArrayList<>();
+        for (int i = 0; i < selectivities.size(); i++) {
+             numbers.add(i);
+        }
+        // generates the powerset for the list
+        List<List<Integer>> positions = powerSet(numbers);
+        positions.remove(0); // get rid of the empty set
+        // for each one of these lists of lists
+        List<List<Boolean>> bitSetsPowerSets = new ArrayList<>(positions.size());
+        for (List<Integer> position : positions) {
+            bitSetsPowerSets.add(bitSetFromPositions(position, selectivities.size()));
+        }
+
         List<SubSet> subSets = new ArrayList<>(subSetSize);
-        for (List<Double> selectivityList : powerSet(selectivities)) {
+        for (List<Boolean> bitSet : bitSetsPowerSets) {
             SubSet subSet = new SubSet();
-            subSet.k = selectivityList.size();
-            subSet.selectivities = selectivityList;
-            subSet.p = subSet.selectivities.stream().reduce(1.0, (a, b) -> a * b);
+            subSet.k = Collections.frequency(bitSet, true);
+            subSet.selectivities = new Selectivities(bitSet, selectivities);
+            subSet.p = subSet.selectivities.calculateP();
             subSet.costModel = costModel;
 
             subSets.add(subSet);
         }
         return subSets;
+    }
+
+    private static List<Boolean> bitSetFromPositions(List<Integer> positions, int length) {
+        Boolean bitSet[] = new Boolean[length];
+        for (int i = 0; i < length; i++) {
+            bitSet[i] = false;
+        }
+        for (int i = 0; i < positions.size(); i++) {
+            bitSet[positions.get(i)] = true;
+        }
+        return Arrays.asList(bitSet);
     }
 
     private static void initializeCosts(List<SubSet> subSets) {
@@ -188,20 +222,86 @@ public class Optimizer implements Callable<String> {
         return sets;
     }
 
+    public static class Selectivities {
+        List<Boolean> bits;         // some subset of the values
+        List<Double> values;        // The global set of selectivities
+
+        public Selectivities(List<Boolean> bits, List<Double> values) {
+            this.bits = bits;
+            this.values = values;
+        }
+
+        /**
+         * Gets bits turned on at the bit locations.
+         * @return
+         */
+        public List<Double> getSelectivitiesFromBits() {
+            Double result[] = new Double[this.values.size()];
+            for (int i = 0; i < this.values.size(); i++) {
+                result[i] = 0.0;
+            }
+            for (int i = 0; i < this.bits.size(); i++) {
+                if (this.bits.get(i)) {
+                    result[i] = this.values.get(i);
+                }
+            }
+            return Arrays.asList(result);
+        }
+
+        /**
+         * Gets the product of the selectivities specified by the bit list.
+         * @return
+         */
+        public double calculateP() {
+            return getSelectivitiesFromBits()
+                    .stream()
+                    .filter(s -> s != 0.0)
+                    .reduce(1.0, (a, b) -> a * b);
+        }
+    }
+
     public static <T> List<List<T>> order(List<List<T>> list) {
         Collections.sort(list, (o1, o2) -> o1.size() - o2.size());
         return list;
     }
 
-    public static <T> List<T> union(List<T> first, List<T> second) {
-        return Stream.concat(first.stream(), second.stream()).distinct().collect(Collectors.toList());
+    public static List<Boolean> bitUnion(List<Boolean> first, List<Boolean> second) {
+        List<Boolean> union = new ArrayList<>(first.size());
+        for (int i = 0; i < first.size(); i++) {
+            if (first.get(i) || second.get(i)) {
+                union.add(i, true);
+            } else {
+                union.add(i, false);
+            }
+        }
+        return union;
     }
 
-    public static <T> List<T> intersection(List<T> first, List<T> second) {
-        return first.stream().filter(second::contains).collect(Collectors.toList());
+    public static List<Boolean> bitIntersection(List<Boolean> first, List<Boolean> second) {
+        List<Boolean> intersection = new ArrayList<>(first.size());
+        for (int i = 0; i < first.size(); i++) {
+            if (first.get(i) && second.get(i)) {
+                intersection.add(i, true);
+            } else {
+                intersection.add(i, false);
+            }
+        }
+        return intersection;
     }
 
-    public static <T> boolean intersect(List<T> first, List<T> second) {
-        return !intersection(first, second).isEmpty();
+    /**
+     *
+     * @param first
+     * @param second
+     * @return true if there is an intersection between two bit sets, false otherwise
+     */
+    public static boolean bitIntersect(List<Boolean> first, List<Boolean> second) {
+        List<Boolean> booleans = bitIntersection(first, second);
+        for (Boolean b : booleans) {
+            if (b) {
+                return true;
+            }
+        }
+        return false;
     }
 }
