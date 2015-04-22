@@ -28,7 +28,7 @@ public class Main {
                 .map(selectivities -> new Optimizer(selectivities, costs))
                 .collect(Collectors.toList());
 
-        ExecutorService executor = Executors.newFixedThreadPool(selectivityList.size());
+        ExecutorService executor = Executors.newFixedThreadPool(1);
         List<Future<String>> results = executor.invokeAll(tasks);
         results.forEach(System.out::println);
         executor.shutdown();
