@@ -1,48 +1,28 @@
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Optimizer implements Callable<String> {
 
     private static class SubSet {
 
         /**
-         * The list of selectivities for this subset.
+         * selectivities: The list of selectivities for this subset.
+         * k: Number of terms corresponding to each subset.
+         * p: Product of the selectivities of all terms in the subset.
+         * b: Whether the no-branch optimization was used to get the best cost.
+         * c: Current best cost for the subset.
+         * L: Left child of the sub plan.
+         * R: Right child of the sub plan.
          */
+
         List<Double> selectivities;
-
-        /**
-         * Represents which selectivities we are currently using.
-         */
-        BitSet bs;
-
-        /**
-         * Number of terms corresponding to each subset.
-         */
         int k;
-
-        /**
-         * Product of the selectivities of all terms in the subset.
-         */
         double p;
-
-        /**
-         * Whether the no-branch optimization was used to get the best cost.
-         */
         boolean b;
-
-        /**
-         * Current best cost for the subset.
-         */
         double c;
-
-        /**
-         * Left child of the sub plan.
-         */
         SubSet L;
-
-        /**
-         * Right child of the sub plan.
-         */
         SubSet R;
 
         CostModel costModel;
@@ -60,6 +40,12 @@ public class Optimizer implements Callable<String> {
             return k * costModel.r + (k - 1) * costModel.l + k * costModel.f + costModel.t;
         }
 
+        // TODO: these methods should not be in this class
+        public double costBranchingAnd(SubSet one, SubSet two) {
+            double q = one.p <= 0.5 ? one.p : 1.0 - one.p;
+            return one.fixedCost() + costModel.m * q + one.p * two.c;
+        }
+
         public SubSet leftMost() {
             SubSet tempLeft = this;
 
@@ -70,29 +56,24 @@ public class Optimizer implements Callable<String> {
         }
 
         // Return true if suboptimal by lemma 4.8
-        public boolean ifLemma48(SubSet subs)
-        {
+        public boolean ifLemma48(SubSet subs) {
             double val1 = (this.leftMost().p - 1) / (this.leftMost()).fixedCost();
             double val2 = (subs.p - 1) / subs.fixedCost();
             boolean term1 = (subs.p <= this.leftMost().p);
             boolean term2 = (val1 < val2);
 
-            return (term1 && term2);
+            return term1 && term2;
         }
 
         // Return true if suboptimal by lemma 4.9
-        public boolean ifLemma49(SubSet subs)
-        {
-
+        public boolean ifLemma49(SubSet subs) {
             double val1 = this.leftMost().fixedCost();
             double val2 = subs.fixedCost();
-
             boolean term1 = ( this.leftMost().p <= subs.p );
             boolean term2 = (val1 < val2);
 
-            return (term1 && term2);
+            return term1 && term2;
         }
-
     }
 
     private static class CostModel {
@@ -139,10 +120,48 @@ public class Optimizer implements Callable<String> {
 
     @Override
     public String call() throws Exception {
-        // 1. Create an array A[] of size 2^k indexed by the subsets of S
         List<SubSet> subSets = generateSubSets(selectivities, costModel);
+
         initialCosts(subSets);
+        System.out.println(subSets.size());
+        subSets.stream().forEachOrdered(s -> {
+            subSets.stream().forEachOrdered(sPrime -> {
+                List<Double> intersection = intersection(s.selectivities, sPrime.selectivities);
+                if (!intersection.isEmpty()) {
+                    if (s.ifLemma48(sPrime)) {
+
+                    } else if (sPrime.p <= 0.5 && s.ifLemma49(sPrime)) {
+
+                    } else {
+                        double c = s.costBranchingAnd(s, sPrime);
+                        List<Double> union = union(sPrime.selectivities, s.selectivities);
+                        for (SubSet subSet : subSets) {
+                            if (subSet.selectivities.equals(union)) {
+                                if (c < subSet.c) {
+                                    subSet.c = c;
+                                    subSet.L = sPrime;
+                                    subSet.R = s;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        printOptimalPlan(selectivities, subSets);
         return "Process me! :-(";
+    }
+
+    // (E1) && [ (E2) && [ ··· [(En-1) && (En)] ··· ]]
+    private static void printOptimalPlan(List<Double> selectivities, List<SubSet> subset) {
+        SubSet subSet = subset.get(subset.size() - 1);
+        System.out.print("Plan: ");
+        selectivities.stream().forEach(s -> System.out.print(s + " "));
+        System.out.println();
+        double cost = subSet.c;
+        System.out.println("Cost: " + cost);
+        System.out.println();
     }
 
     private static List<SubSet> generateSubSets(List<Double> selectivities, CostModel costModel) {
@@ -152,9 +171,10 @@ public class Optimizer implements Callable<String> {
         for (List<Double> selectivityList : selectivityPowerSet) {
             SubSet subSet = new SubSet();
             subSet.k = selectivityList.size();
-            subSet.p = selectivityList.stream().reduce(1.0, (a, b) -> a * b);
-            subSet.costModel = costModel;
             subSet.selectivities = selectivityList;
+            subSet.p = subSet.selectivities.stream().reduce(1.0, (a, b) -> a * b);
+            subSet.costModel = costModel;
+
             subSets.add(subSet);
         }
         return subSets;
@@ -196,5 +216,15 @@ public class Optimizer implements Callable<String> {
                 subSet.c = logicalAndCost;
             }
         }
+    }
+
+    // TODO: sorted?
+    public <T> List<T> union(List<T> first, List<T> second) {
+        return Stream.concat(first.stream(), second.stream()).distinct().collect(Collectors.toList());
+    }
+
+    // TODO: sorted?
+    public <T> List<T> intersection(List<T> first, List<T> second) {
+        return first.stream().filter(second::contains).collect(Collectors.toList());
     }
 }
