@@ -1,5 +1,9 @@
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
 public class Optimizer implements Callable<String> {
 
@@ -59,6 +63,14 @@ public class Optimizer implements Callable<String> {
             return q;
         }
 
+        public SubSet rightMost() {
+            SubSet q = this;
+            while (q.R != null) {
+                q = q.R;
+            }
+            return q;
+        }
+
         public boolean lemma48(SubSet two) {
             double p1 = two.p;
             double p2 = this.leftMost().p;
@@ -69,6 +81,84 @@ public class Optimizer implements Callable<String> {
             double p1 = two.p;
             double p2 = this.leftMost().p;
             return p2 <= p1 && this.leftMost().fixedCost() < two.fixedCost();
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+
+            if (atEnd()) {
+                if (k > 1) {
+                    sb.append("(");
+                }
+                for (int i = 0; i < selectivities.bitSet.size(); i++) {
+                    if (selectivities.bitSet.get(i)) {
+                        sb.append("t").append(i + 1).append("[o").append(i + 1).append("[i]]").append(" & ");
+                    }
+                }
+                sb.setLength(sb.length() - 3);
+                if (k > 1) {
+                    sb.append(")");
+                }
+            } else {
+                if (R.R == null && R.b) {
+                    sb.append("(").append(L).append(")");
+                } else {
+                    sb.append("(").append(L).append(" && ").append(R).append(")");
+                }
+            }
+            return sb.toString();
+        }
+
+        public String optimalAsString(List<Double> selectivities) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(header(selectivities));
+
+            if (atEnd()) {
+              if (!this.b) {
+                sb.append("if ").append(this).append(" {\n");
+                sb.append("\tanswer[j++] = i;\n}\n");
+              }
+              else {
+                sb.append("answer[j] = i;\n");
+                sb.append("j += ").append(this).append(";\n");
+              }
+            } else {
+              sb.append("if ").append(this).append(" {\n");
+              SubSet rightmost = this.rightMost();
+              if (rightmost.b) {
+                sb.append("\tanswer[j] = i;\n");
+                sb.append("\tj += ").append(rightmost.toString()).append(";\n");
+              }
+              else {
+                sb.append("\tanswer[j++] = i;\n");
+              }
+              sb.append("}\n");
+            }
+
+            sb.append(footer());
+            return sb.toString();
+        }
+
+        private boolean atEnd() {
+            return this.L == null && this.R == null;
+        }
+
+        private StringBuilder header(List<Double> selectivities) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("==================================================================\n");
+            sb.append(selectivities.stream().map(Object::toString).collect(Collectors.joining(" ")));
+            sb.append("\n");
+            sb.append("------------------------------------------------------------------\n");
+            return sb;
+        }
+
+        private StringBuilder footer() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("------------------------------------------------------------------\n");
+            sb.append("cost: ").append(c);
+            sb.append("\n");
+            return sb;
         }
     }
 
@@ -115,8 +205,11 @@ public class Optimizer implements Callable<String> {
                 }
             }
         }
-        printOptimalPlan(selectivities, subSets);
-        return "Process me! :-(";
+
+        SubSet optimal = subSets.get(subSets.size() - 1);
+        String s = optimal.optimalAsString(selectivities);
+        System.out.println(s);
+        return s;
     }
 
     /**
@@ -131,17 +224,6 @@ public class Optimizer implements Callable<String> {
                 .stream()
                 .filter(ss -> ss.selectivities.bitSet.equals(bitSet))
                 .findFirst().get();
-    }
-
-    // (E1) && [ (E2) && [ ··· [(En-1) && (En)] ··· ]]
-    private static void printOptimalPlan(List<Double> selectivities, List<SubSet> subset) {
-        SubSet subSet = subset.get(subset.size() - 1);
-        System.out.print("Plan: ");
-        selectivities.stream().forEach(s -> System.out.print(s + " "));
-        System.out.println();
-        double cost = subSet.c;
-        System.out.println("Cost: " + cost);
-        System.out.println();
     }
 
     private static List<SubSet> generateSubSets(List<Double> selectivities) {

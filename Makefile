@@ -1,7 +1,10 @@
+# TODO: get correct javac
+JAVAC=/local/jdk1.8.0_31/bin/javac
+
 default: optimizer
 
 optimizer:
-	javac src/main/java/*.java
+	$(JAVAC) src/main/java/*.java
 
 all: clean optimizer
 

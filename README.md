@@ -27,3 +27,6 @@ variable naming.
 Each query optimization can be easily executed in its own thread to speed up
 computation speed.
 
+### Authors
+Johan Mena (jmm2371)
+Emre Ozen (eo2312)
